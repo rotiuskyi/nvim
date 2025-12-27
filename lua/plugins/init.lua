@@ -12,5 +12,12 @@ require("lazy").setup({
       require("nvim-treesitter").setup({})
     end,
   },
+  {
+    "EdenEast/nightfox.nvim",
+    config = function()
+      require("nightfox").setup({})
+      vim.cmd("colorscheme nightfox")
+    end,
+  },
 })
 
