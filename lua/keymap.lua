@@ -26,4 +26,3 @@ end, { desc = "[F]ind [B]uffers" })
 map("n", "<leader>fh", function()
   require("telescope.builtin").help_tags()
 end, { desc = "[F]ind [H]elp" })
-

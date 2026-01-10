@@ -30,7 +30,5 @@ vim.lsp.config("lua_ls", {
   },
 })
 
-
 _G.lsp_on_attach = on_attach
 _G.lsp_capabilities = capabilities
-
