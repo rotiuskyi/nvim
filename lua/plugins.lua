@@ -65,6 +65,27 @@ require("lazy").setup({
     end,
   },
   {
+    "folke/zen-mode.nvim",
+    opts = {
+      window = {
+        backdrop = 0.95,
+        width = 120,
+        height = 1,
+        options = {},
+      },
+      plugins = {
+        options = {
+          enabled = true,
+          ruler = false,
+          showcmd = false,
+          laststatus = 3,
+        },
+        gitsigns = { enabled = false },
+        tmux = { enabled = false },
+      },
+    },
+  },
+  {
     "seblyng/roslyn.nvim",
     opts = {
       filewatching = "auto",
