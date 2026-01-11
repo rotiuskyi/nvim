@@ -192,73 +192,90 @@ require("lazy").setup({
           fields = { "kind", "abbr", "menu" },
           format = function(entry, vim_item)
             local kind_icons = {
-              Text = "󰉿",
               Method = "󰆧",
               Function = "󰊕",
               Constructor = "󰆧",
-              Field = "󰇽",
               Variable = "󰂡",
+              Field = "󰇽",
+              Property = "󰜢",
               Class = "󰆧",
               Interface = "󰗭",
-              Module = "󰏗",
-              Property = "󰜢",
-              Unit = "󰑭",
-              Value = "󰎠",
-              Enum = "󰒻",
               Keyword = "󰌋",
-              Snippet = "󰆐",
-              Color = "󰏘",
-              File = "󰈔",
-              Reference = "󰈇",
-              Folder = "󰉋",
-              EnumMember = "󰒻",
-              Constant = "󰏿",
-              Struct = "󰆧",
-              Event = "󰆧",
-              Operator = "󰆕",
-              TypeParameter = "󰅲",
             }
 
-            vim_item.kind = string.format("%s %s", kind_icons[vim_item.kind] or "", vim_item.kind or "")
+            local kind_name = vim_item.kind:match("%S+$") or ""
+            local icon = kind_icons[kind_name] or ""
+            
+            if icon ~= "" then
+              vim_item.kind = icon
+            else
+              vim_item.kind = ""
+            end
 
-            local source_name = ({
-              nvim_lsp = "[LSP]",
-              luasnip = "[Snippet]",
-              buffer = "[Buffer]",
-              path = "[Path]",
-            })[entry.source.name] or ""
-
+            local completion_item = entry.completion_item
             local detail = ""
-            if entry.completion_item then
-              if entry.completion_item.detail then
-                detail = entry.completion_item.detail
-              end
-              if entry.completion_item.documentation then
-                local doc = entry.completion_item.documentation
-                if type(doc) == "string" then
-                  detail = detail ~= "" and (detail .. " | " .. doc) or doc
-                elseif type(doc) == "table" and doc.value then
-                  detail = detail ~= "" and (detail .. " | " .. doc.value) or doc.value
-                end
+
+            if completion_item then
+              if completion_item.detail then
+                detail = completion_item.detail
               end
             end
 
-            if detail ~= "" then
-              vim_item.menu = string.format("%s %s", source_name, detail)
+            if kind_name == "Method" or kind_name == "Function" or kind_name == "Constructor" then
+              if detail and detail ~= "" then
+                local func_name = vim_item.abbr
+                local params = detail:match("%b()") or ""
+                local return_type = ""
+                
+                if detail:match("^%S+") then
+                  return_type = detail:match("^(%S+)%s+" .. func_name) or detail:match("^(%S+)%s+%(") or ""
+                end
+                
+                if params ~= "" then
+                  params = params:gsub("%s+", " ")
+                  local max_param_width = 60
+                  if #params > max_param_width then
+                    params = params:sub(1, max_param_width) .. "...)"
+                  end
+                  vim_item.abbr = func_name .. params
+                end
+                
+                if return_type ~= "" and return_type ~= func_name then
+                  vim_item.menu = "→ " .. return_type
+                else
+                  vim_item.menu = ""
+                end
+              else
+                vim_item.menu = ""
+              end
+            elseif kind_name == "Variable" or kind_name == "Field" or kind_name == "Property" then
+              if detail and detail ~= "" then
+                local var_type = detail:match("^%s*(%S+)") or detail
+                local max_width = 35
+                if #var_type > max_width then
+                  var_type = var_type:sub(1, max_width) .. "..."
+                end
+                vim_item.menu = var_type
+              else
+                vim_item.menu = ""
+              end
             else
-              vim_item.menu = source_name
+              vim_item.menu = ""
             end
 
             return vim_item
           end,
         },
         sources = cmp.config.sources({
-          { name = "nvim_lsp", priority = 1000 },
+          { name = "nvim_lsp", priority = 1000, max_item_count = 20 },
           { name = "luasnip", priority = 750 },
         }, {
-          { name = "buffer", priority = 500, keyword_length = 3 },
+          { name = "buffer", priority = 500, keyword_length = 4, max_item_count = 5 },
           { name = "path", priority = 250 },
         }),
+        completion = {
+          keyword_length = 1,
+        },
         window = {
           completion = cmp.config.window.bordered(),
           documentation = cmp.config.window.bordered(),
