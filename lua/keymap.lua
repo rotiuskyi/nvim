@@ -26,3 +26,7 @@ end, { desc = "[F]ind [B]uffers" })
 map("n", "<leader>fh", function()
   require("telescope.builtin").help_tags()
 end, { desc = "[F]ind [H]elp" })
+
+map("n", "<leader>z", function()
+  require("zen-mode").toggle()
+end, { desc = "[Z]en Mode" })
