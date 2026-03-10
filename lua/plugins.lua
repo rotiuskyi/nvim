@@ -1,8 +1,27 @@
 require("lazy").setup({
   {
-    "nvim-telescope/telescope.nvim",
-    branch = "0.1.x",
-    dependencies = { "nvim-lua/plenary.nvim" },
+    "echasnovski/mini.pick",
+    version = false,
+    config = function()
+      require("mini.pick").setup({
+        window = {
+          config = function()
+            local win = vim.api.nvim_get_current_win()
+            local width = vim.api.nvim_win_get_width(win)
+            local height = vim.api.nvim_win_get_height(win)
+            return {
+              relative = "win",
+              win = win,
+              width = width,
+              height = height,
+              row = 0,
+              col = 0,
+              border = "single",
+            }
+          end,
+        },
+      })
+    end,
   },
   {
     "nvim-treesitter/nvim-treesitter",

@@ -15,16 +15,16 @@ vim.g.mapleader = " "
 vim.g.maplocalleader = " "
 
 map("n", "<leader>ff", function()
-  require("telescope.builtin").find_files()
+  require("mini.pick").builtin.files()
 end, { desc = "[F]ind [F]iles" })
 map("n", "<leader>fg", function()
-  require("telescope.builtin").live_grep()
+  require("mini.pick").builtin.grep_live()
 end, { desc = "[F]ind by [G]rep" })
 map("n", "<leader>fb", function()
-  require("telescope.builtin").buffers()
+  require("mini.pick").builtin.buffers()
 end, { desc = "[F]ind [B]uffers" })
 map("n", "<leader>fh", function()
-  require("telescope.builtin").help_tags()
+  require("mini.pick").builtin.help()
 end, { desc = "[F]ind [H]elp" })
 
 map("n", "<leader>z", function()
