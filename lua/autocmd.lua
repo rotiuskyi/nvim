@@ -63,3 +63,52 @@ autocmd("LspAttach", {
     end
   end,
 })
+
+augroup("ZenOnStartup", { clear = true })
+autocmd("VimEnter", {
+  group = "ZenOnStartup",
+  callback = function()
+    local ok, zenmode = pcall(require, "zen-mode")
+    if ok then
+      zenmode.toggle()
+    end
+  end,
+})
+
+vim.api.nvim_create_user_command("Q", function(opts)
+  local ok, zenmode = pcall(require, "zen-mode")
+  if ok and vim.g.zen_mode_active then
+    zenmode.toggle()
+  end
+
+  if opts.bang then
+    vim.cmd("quit!")
+  else
+    vim.cmd("quit")
+  end
+end, { bang = true })
+
+vim.cmd([[
+  cnoreabbrev <expr> q  (getcmdtype() == ':' && getcmdline() ==# 'q'  && exists('g:zen_mode_winid') && win_getid() ==# g:zen_mode_winid)  ? 'Q'  : 'q'
+  cnoreabbrev <expr> q! (getcmdtype() == ':' && getcmdline() ==# 'q!' && exists('g:zen_mode_winid') && win_getid() ==# g:zen_mode_winid) ? 'Q!' : 'q!'
+]])
+
+augroup("LazyKeepZen", { clear = true })
+autocmd("BufWinLeave", {
+  group = "LazyKeepZen",
+  callback = function(args)
+    local ft = vim.api.nvim_get_option_value("filetype", { buf = args.buf })
+    if ft ~= "lazy" then
+      return
+    end
+
+    if vim.g.zen_mode_active then
+      return
+    end
+
+    local ok, zenmode = pcall(require, "zen-mode")
+    if ok then
+      zenmode.toggle()
+    end
+  end,
+})

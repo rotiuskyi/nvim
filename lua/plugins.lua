@@ -102,6 +102,14 @@ require("lazy").setup({
         gitsigns = { enabled = false },
         tmux = { enabled = false },
       },
+      on_open = function()
+        vim.g.zen_mode_active = true
+        vim.g.zen_mode_winid = vim.api.nvim_get_current_win()
+      end,
+      on_close = function()
+        vim.g.zen_mode_active = false
+        vim.g.zen_mode_winid = nil
+      end,
     },
   },
   {
