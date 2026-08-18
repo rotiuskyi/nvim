@@ -63,3 +63,29 @@ autocmd("LspAttach", {
     end
   end,
 })
+
+augroup("RustFormatOnSave", { clear = true })
+autocmd("BufWritePre", {
+  group = "RustFormatOnSave",
+  pattern = "*.rs",
+  callback = function(args)
+    if #vim.lsp.get_clients({ bufnr = args.buf, name = "rust_analyzer" }) > 0 then
+      vim.lsp.buf.format({ bufnr = args.buf, timeout_ms = 3000 })
+    end
+  end,
+  desc = "Format Rust buffers with rustfmt via rust-analyzer",
+})
+
+augroup("RustFileSettings", { clear = true })
+autocmd("FileType", {
+  group = "RustFileSettings",
+  pattern = "rust",
+  callback = function()
+    vim.bo.tabstop = 4
+    vim.bo.shiftwidth = 4
+    vim.bo.expandtab = true
+    vim.bo.commentstring = "// %s"
+    vim.opt_local.colorcolumn = "100"
+  end,
+  desc = "rustfmt-compatible indentation for Rust files",
+})

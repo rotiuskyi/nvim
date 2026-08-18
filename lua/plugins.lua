@@ -167,6 +167,46 @@ require("lazy").setup({
     end,
   },
   {
+    "saecki/crates.nvim",
+    tag = "stable",
+    event = { "BufRead Cargo.toml" },
+    dependencies = { "nvim-lua/plenary.nvim" },
+    config = function()
+      require("crates").setup({
+        completion = {
+          cmp = { enabled = true },
+          crates = { enabled = true },
+        },
+        lsp = {
+          enabled = true,
+          actions = true,
+          completion = false,
+          hover = true,
+        },
+      })
+
+      local cmp_ok, cmp = pcall(require, "cmp")
+      if cmp_ok then
+        cmp.setup.filetype("toml", {
+          sources = cmp.config.sources({
+            { name = "crates", priority = 1000 },
+            { name = "nvim_lsp", priority = 900 },
+          }, {
+            { name = "buffer", priority = 500, keyword_length = 4 },
+            { name = "path", priority = 250 },
+          }),
+        })
+      end
+
+      local crates = require("crates")
+      local opts = { silent = true }
+      vim.keymap.set("n", "<leader>ct", crates.toggle, vim.tbl_extend("force", opts, { desc = "[C]rates [T]oggle" }))
+      vim.keymap.set("n", "<leader>cr", crates.reload, vim.tbl_extend("force", opts, { desc = "[C]rates [R]eload" }))
+      vim.keymap.set("n", "<leader>cu", crates.upgrade_crate, vim.tbl_extend("force", opts, { desc = "[C]rates [U]pgrade" }))
+      vim.keymap.set("n", "<leader>cA", crates.upgrade_all_crates, vim.tbl_extend("force", opts, { desc = "[C]rates upgrade [A]ll" }))
+    end,
+  },
+  {
     "hrsh7th/nvim-cmp",
     dependencies = {
       "hrsh7th/cmp-nvim-lsp",
