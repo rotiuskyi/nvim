@@ -9,7 +9,32 @@ require("lazy").setup({
     lazy = false,
     build = ":TSUpdate",
     config = function()
-      require("nvim-treesitter").setup({})
+      local ts = require("nvim-treesitter")
+      ts.setup({})
+
+      local ensure_installed = { "rust", "toml", "ron", "lua", "vim", "vimdoc", "c_sharp", "xml", "markdown" }
+      local installed = ts.get_installed()
+      local missing = vim.tbl_filter(function(lang)
+        return not vim.tbl_contains(installed, lang)
+      end, ensure_installed)
+      if #missing > 0 then
+        ts.install(missing)
+      end
+
+      -- the main branch does not attach highlighting itself
+      vim.api.nvim_create_autocmd("FileType", {
+        group = vim.api.nvim_create_augroup("TreesitterHighlight", { clear = true }),
+        callback = function(args)
+          local lang = vim.treesitter.language.get_lang(vim.bo[args.buf].filetype)
+          if not lang then
+            return
+          end
+          if pcall(vim.treesitter.start, args.buf, lang) then
+            vim.bo[args.buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+          end
+        end,
+        desc = "Enable treesitter highlighting when a parser is available",
+      })
     end,
   },
   {
