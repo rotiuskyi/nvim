@@ -18,6 +18,37 @@ if cmp_ok then
   capabilities = vim.tbl_deep_extend("force", capabilities, cmp_nvim_lsp.default_capabilities())
 end
 
+-- XAML / Avalonia: filetype and syntax for .axaml
+vim.filetype.add({ extension = { axaml = "axaml" } })
+vim.api.nvim_create_autocmd("FileType", {
+  pattern = "axaml",
+  callback = function()
+    vim.bo.syntax = "xml"
+  end,
+  desc = "Use XML syntax for Avalonia XAML",
+})
+
+-- Avalonia XAML LSP (avalonia-ls) — completions, formatting; install separately
+-- e.g. from source: https://github.com/SaverinOnRails/ls-for-avalonia (just install)
+-- or AUR: yay -S avalonia-ls-git
+local function avalonia_root_dir()
+  local proj = vim.fs.find({ "*.csproj", "*.fsproj" }, { upward = true })[1]
+  if proj then
+    return vim.fs.dirname(proj)
+  end
+  return vim.fn.getcwd()
+end
+
+if vim.fn.executable("avalonia-ls") == 1 then
+  vim.lsp.config("avalonia_ls", {
+    cmd = { "avalonia-ls" },
+    filetypes = { "axaml" },
+    root_dir = avalonia_root_dir,
+    on_attach = on_attach,
+    capabilities = capabilities,
+  })
+end
+
 vim.lsp.config("lua_ls", {
   on_attach = on_attach,
   capabilities = capabilities,
