@@ -115,9 +115,19 @@ autocmd({ "CursorMoved", "DiagnosticChanged" }, {
     end
     vim.b[args.buf].diagnostic_rendered_lnum = lnum
 
-    -- only worth re-rendering when the cursor entered or left a flagged line
+    -- only worth re-rendering when the cursor entered or left a line some
+    -- diagnostic covers; a diagnostic can span lines, so its start is not enough
     local function flagged(line)
-      return line and #vim.diagnostic.get(args.buf, { lnum = line - 1 }) > 0
+      if not line then
+        return false
+      end
+      local lnum = line - 1
+      for _, d in ipairs(vim.diagnostic.get(args.buf)) do
+        if lnum >= d.lnum and lnum <= (d.end_lnum or d.lnum) then
+          return true
+        end
+      end
+      return false
     end
     if flagged(lnum) or flagged(previous) then
       vim.diagnostic.show(nil, args.buf)
