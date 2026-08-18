@@ -10,6 +10,16 @@ local on_attach = function(client, bufnr)
   map("n", "<leader>rr", vim.lsp.buf.references, vim.tbl_extend("force", opts, { desc = "[R]eferences" }))
   map("n", "<leader>rn", vim.lsp.buf.rename, vim.tbl_extend("force", opts, { desc = "[R]e[N]ame" }))
   map("i", "<C-h>", vim.lsp.buf.signature_help, vim.tbl_extend("force", opts, { desc = "Signature Help" }))
+  map("n", "<leader>f", function()
+    vim.lsp.buf.format({ async = true })
+  end, vim.tbl_extend("force", opts, { desc = "[F]ormat buffer" }))
+
+  if client:supports_method("textDocument/inlayHint") then
+    vim.lsp.inlay_hint.enable(true, { bufnr = bufnr })
+    map("n", "<leader>th", function()
+      vim.lsp.inlay_hint.enable(not vim.lsp.inlay_hint.is_enabled({ bufnr = bufnr }), { bufnr = bufnr })
+    end, vim.tbl_extend("force", opts, { desc = "[T]oggle inlay [H]ints" }))
+  end
 end
 
 local capabilities = vim.lsp.protocol.make_client_capabilities()
@@ -60,6 +70,15 @@ vim.lsp.config("lua_ls", {
     },
   },
 })
+
+-- vim.lsp.config() only registers a config; nothing starts until it is enabled.
+local servers = { "lua_ls" }
+
+if vim.fn.executable("avalonia-ls") == 1 then
+  table.insert(servers, "avalonia_ls")
+end
+
+vim.lsp.enable(servers)
 
 _G.lsp_on_attach = on_attach
 _G.lsp_capabilities = capabilities

@@ -119,9 +119,6 @@ require("lazy").setup({
       "williamboman/mason.nvim",
       "williamboman/mason-lspconfig.nvim",
     },
-    config = function()
-      require("lsp")
-    end,
   },
   {
     "williamboman/mason.nvim",
