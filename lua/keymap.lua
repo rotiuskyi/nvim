@@ -30,3 +30,8 @@ end, { desc = "[F]ind [H]elp" })
 map("n", "<leader>z", function()
   require("zen-mode").toggle()
 end, { desc = "[Z]en Mode" })
+
+-- Rust / Cargo
+map("n", "<leader>rb", "<cmd>!cargo build<CR>", { desc = "Ca[R]go [B]uild" })
+map("n", "<leader>rt", "<cmd>!cargo test<CR>", { desc = "Ca[R]go [T]est" })
+map("n", "<leader>rc", "<cmd>!cargo clippy<CR>", { desc = "Ca[R]go [C]lippy" })
