@@ -93,12 +93,48 @@ autocmd("FileType", {
   desc = "rustfmt's line length for Rust files",
 })
 
--- virtual_lines renders the cursor line, so the inline virtual text for that
--- line is suppressed in config.lua. That decision is made at render time, and
--- inline text is only rendered when diagnostics change, so re-render it
--- whenever the cursor lands on a different line.
-autocmd({ "CursorMoved", "DiagnosticChanged" }, {
-  group = augroup("DiagnosticCursorLine", { clear = true }),
+-- Inline diagnostics are laid out against the room left on the screen line, and
+-- that measurement can go stale in two ways.
+--
+-- virtual_lines renders the cursor line, so the inline text for that line is
+-- suppressed in config.lua. That decision is made at render time, and inline
+-- text is only redrawn when diagnostics change, so the line has to be redrawn
+-- when the cursor arrives at or leaves it.
+--
+-- A server can also answer in more than one namespace -- rust-analyzer sends
+-- push and pull diagnostics separately -- and each one renders on its own,
+-- unable to see the other's messages when working out how much room is left.
+-- Redrawing once they have all landed settles the line.
+local reshow_pending = {}
+
+local function reshow(bufnr)
+  if reshow_pending[bufnr] then
+    return
+  end
+  reshow_pending[bufnr] = true
+  -- long enough to coalesce a burst of namespaces answering one after another
+  vim.defer_fn(function()
+    reshow_pending[bufnr] = nil
+    if vim.api.nvim_buf_is_valid(bufnr) then
+      -- redraws every namespace, which is the point: each is re-measured
+      -- knowing what the others put on the line
+      vim.diagnostic.show(nil, bufnr)
+    end
+  end, 150)
+end
+
+augroup("DiagnosticCursorLine", { clear = true })
+
+autocmd("DiagnosticChanged", {
+  group = "DiagnosticCursorLine",
+  callback = function(args)
+    reshow(args.buf)
+  end,
+  desc = "Re-measure inline diagnostics once every namespace has answered",
+})
+
+autocmd("CursorMoved", {
+  group = "DiagnosticCursorLine",
   callback = function(args)
     local lnum = vim.api.nvim_win_get_cursor(0)[1]
     local previous = vim.b[args.buf].diagnostic_rendered_lnum
@@ -107,7 +143,7 @@ autocmd({ "CursorMoved", "DiagnosticChanged" }, {
     end
     vim.b[args.buf].diagnostic_rendered_lnum = lnum
 
-    -- only worth re-rendering when the cursor entered or left a line some
+    -- only worth redrawing when the cursor entered or left a line some
     -- diagnostic covers; a diagnostic can span lines, so its start is not enough
     local function flagged(line)
       if not line then

@@ -51,6 +51,14 @@ local VIRTUAL_LINES_SEVERITY = { min = vim.diagnostic.severity.INFO }
 -- the sign column still flags the line, and moving onto it shows the full text.
 local MIN_VIRTUAL_TEXT_WIDTH = 12
 
+-- Neovim draws a virtual line as the indent up to the diagnostic's column, then
+-- a branch of a box character, four dashes and a space, then the message.
+local VIRTUAL_LINES_BRANCH = 6
+
+-- Wrapping to fewer columns than this gives a ragged stack of fragments rather
+-- than something readable, so below it the message is cut to one line instead.
+local MIN_VIRTUAL_LINES_WIDTH = 24
+
 -- rust-analyzer appends the lint a warning came from, e.g.
 -- "`#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default". It repeats
 -- for every warning and says nothing the message does not already say.
@@ -76,6 +84,47 @@ local function truncate(text, width)
   return out .. ELLIPSIS
 end
 
+-- A word wider than the whole column runs on until it fits.
+local function split_wide(word, width)
+  local pieces = {}
+  while vim.fn.strdisplaywidth(word) > width do
+    local piece = vim.fn.strcharpart(word, 0, width)
+    while vim.fn.strchars(piece) > 1 and vim.fn.strdisplaywidth(piece) > width do
+      piece = vim.fn.strcharpart(piece, 0, vim.fn.strchars(piece) - 1)
+    end
+    table.insert(pieces, piece)
+    word = word:sub(#piece + 1)
+  end
+  table.insert(pieces, word)
+  return pieces
+end
+
+local function wrap(text, width)
+  if width < 1 or vim.fn.strdisplaywidth(text) <= width then
+    return { text }
+  end
+
+  local lines, current = {}, ""
+  for word in text:gmatch("%S+") do
+    for _, piece in ipairs(split_wide(word, width)) do
+      local candidate = current == "" and piece or (current .. " " .. piece)
+      if vim.fn.strdisplaywidth(candidate) <= width then
+        current = candidate
+      else
+        if current ~= "" then
+          table.insert(lines, current)
+        end
+        current = piece
+      end
+    end
+  end
+  if current ~= "" then
+    table.insert(lines, current)
+  end
+
+  return #lines > 0 and lines or { text }
+end
+
 local function cursor_lnum(bufnr)
   local win = vim.fn.bufwinid(bufnr or vim.api.nvim_get_current_buf())
   if win == -1 then
@@ -97,6 +146,30 @@ local function starting_on(bufnr, lnum, severity)
   return count
 end
 
+-- Room left for the message inside a virtual line: the window, less the gutter,
+-- the indent Neovim adds to reach the diagnostic's column, the branch it draws
+-- there, and one column per further diagnostic stacked on the same line.
+local function room_for_virtual_lines(diagnostic)
+  local bufnr = diagnostic.bufnr or vim.api.nvim_get_current_buf()
+  local win = vim.fn.bufwinid(bufnr)
+  if win == -1 then
+    return math.huge
+  end
+
+  local info = vim.fn.getwininfo(win)[1]
+  local gutter = info and info.textoff or 0
+  local line = vim.api.nvim_buf_get_lines(bufnr, diagnostic.lnum, diagnostic.lnum + 1, false)[1] or ""
+  local indent = vim.fn.strdisplaywidth(line:sub(1, diagnostic.col))
+  local stacked = math.max(1, starting_on(bufnr, diagnostic.lnum, VIRTUAL_LINES_SEVERITY)) - 1
+
+  -- Not floored: the indent is Neovim's to choose, so asking for more columns
+  -- than are left would only put the text back off the right edge. A result of
+  -- zero or less means the branch alone already fills the window.
+  return vim.api.nvim_win_get_width(win) - gutter - indent - VIRTUAL_LINES_BRANCH - stacked
+end
+
+
+
 -- Mirrors what Neovim's virtual_lines handler puts under the cursor line: the
 -- diagnostics starting on it, or, when there are none, every diagnostic whose
 -- range covers it. Matching on the start line alone would leave the inline text
@@ -107,15 +180,48 @@ local function shown_as_virtual_lines(diagnostic)
   if not lnum then
     return false
   end
+  -- A diagnostic with no room left for its message is dropped by the handler
+  -- below, so the inline text has to stand in for it.
+  if room_for_virtual_lines(diagnostic) < 1 then
+    return false
+  end
   if starting_on(bufnr, lnum, VIRTUAL_LINES_SEVERITY) > 0 then
     return diagnostic.lnum == lnum
   end
   return diagnostic.end_lnum ~= nil and lnum >= diagnostic.lnum and lnum <= diagnostic.end_lnum
 end
 
+-- Neovim gives every diagnostic on a line its own inline chunk and lays them
+-- out one after another on the same screen row, so a second message all but
+-- guarantees a run past the right edge. Only the most serious one is kept
+-- inline; the others show up as virtual lines once the cursor reaches the line,
+-- and in full on <leader>d.
+local function keeps_inline_text(diagnostic)
+  local bufnr = diagnostic.bufnr or vim.api.nvim_get_current_buf()
+  local best
+  for _, d in ipairs(vim.diagnostic.get(bufnr, { severity = VIRTUAL_TEXT_SEVERITY })) do
+    if
+      d.lnum == diagnostic.lnum
+      and (
+        not best
+        or d.severity < best.severity
+        or (d.severity == best.severity and d.col < best.col)
+        or (d.severity == best.severity and d.col == best.col and d.message < best.message)
+      )
+    then
+      best = d
+    end
+  end
+  -- format() is handed a copy, so the winner is matched on its fields
+  return best ~= nil
+    and best.severity == diagnostic.severity
+    and best.col == diagnostic.col
+    and best.message == diagnostic.message
+end
+
 -- Room between the end of the code on this line and the right edge of the
--- window. Neovim lays the inline text out as `spacing` blanks, one prefix per
--- diagnostic on the line, then a space and the message of the last one.
+-- window. What Neovim draws before the message is `spacing` blanks, the prefix,
+-- and one separating space.
 local function room_for_virtual_text(diagnostic)
   local bufnr = diagnostic.bufnr or vim.api.nvim_get_current_buf()
   local win = vim.fn.bufwinid(bufnr)
@@ -126,10 +232,7 @@ local function room_for_virtual_text(diagnostic)
   local info = vim.fn.getwininfo(win)[1]
   local gutter = info and info.textoff or 0
   local line = vim.api.nvim_buf_get_lines(bufnr, diagnostic.lnum, diagnostic.lnum + 1, false)[1] or ""
-  local on_line = starting_on(bufnr, diagnostic.lnum, VIRTUAL_TEXT_SEVERITY)
-  local decoration = VIRTUAL_TEXT_SPACING
-    + math.max(1, on_line) * vim.fn.strdisplaywidth(VIRTUAL_TEXT_PREFIX)
-    + 1
+  local decoration = VIRTUAL_TEXT_SPACING + vim.fn.strdisplaywidth(VIRTUAL_TEXT_PREFIX) + 1
 
   return vim.api.nvim_win_get_width(win) - gutter - vim.fn.strdisplaywidth(line) - decoration
 end
@@ -137,11 +240,14 @@ end
 vim.diagnostic.config({
   virtual_text = {
     severity = VIRTUAL_TEXT_SEVERITY,
-    source = "if_many",
+    -- Off on purpose: Neovim prepends the source after format() has run, so its
+    -- width cannot be budgeted for and it pushed the message off the edge. The
+    -- float on <leader>d still names the source.
+    source = false,
     prefix = VIRTUAL_TEXT_PREFIX,
     spacing = VIRTUAL_TEXT_SPACING,
     format = function(diagnostic)
-      if shown_as_virtual_lines(diagnostic) then
+      if shown_as_virtual_lines(diagnostic) or not keeps_inline_text(diagnostic) then
         return nil
       end
       local room = room_for_virtual_text(diagnostic)
@@ -154,10 +260,31 @@ vim.diagnostic.config({
   virtual_lines = {
     current_line = true,
     severity = VIRTUAL_LINES_SEVERITY,
-    -- newlines are kept: each one becomes its own virtual line, which is what
-    -- keeps a long message on screen instead of running off the right edge
+    -- Every newline becomes its own virtual line, and Neovim never wraps one:
+    -- it sets virt_lines_overflow to "scroll", so a long message is drawn as a
+    -- single row running past the right edge. Wrapping it here to the room
+    -- actually left turns that overflow into further rows.
     format = function(diagnostic)
-      return table.concat(useful_lines(diagnostic.message), "\n")
+      local room = room_for_virtual_lines(diagnostic)
+
+      -- Code indented almost to the right edge leaves the branch no room for a
+      -- message. Rather than draw one that runs off screen, drop it here: the
+      -- sign column still flags the line, the inline text takes over, and
+      -- <leader>d has the whole message.
+      if room < 1 then
+        return nil
+      end
+
+      local lines = useful_lines(diagnostic.message)
+      if room < MIN_VIRTUAL_LINES_WIDTH then
+        return truncate(table.concat(lines, " "), room)
+      end
+
+      local wrapped = {}
+      for _, line in ipairs(lines) do
+        vim.list_extend(wrapped, wrap(line, room))
+      end
+      return table.concat(wrapped, "\n")
     end,
   },
   float = {
