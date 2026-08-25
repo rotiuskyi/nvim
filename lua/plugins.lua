@@ -1,348 +1,210 @@
-require("lazy").setup({
-  {
-    "nvim-telescope/telescope.nvim",
-    branch = "0.1.x",
-    dependencies = { "nvim-lua/plenary.nvim" },
-  },
-  {
-    "nvim-treesitter/nvim-treesitter",
-    lazy = false,
-    build = ":TSUpdate",
-    config = function()
-      local ts = require("nvim-treesitter")
-      ts.setup({})
+-- Plugins are managed by vim.pack, Neovim's own package manager. There is no
+-- bootstrap step and no lock file: vim.pack.add clones what is missing on
+-- startup, and `:lua vim.pack.update()` opens a confirmation buffer with the
+-- changelog before pulling anything.
 
-      local ensure_installed = { "rust", "toml", "ron", "lua", "vim", "vimdoc", "c_sharp", "xml", "markdown" }
-      local installed = ts.get_installed()
-      local missing = vim.tbl_filter(function(lang)
-        return not vim.tbl_contains(installed, lang)
-      end, ensure_installed)
-      if #missing > 0 then
-        ts.install(missing)
-      end
+-- 1. colours
+vim.pack.add({
+  { src = "https://github.com/folke/tokyonight.nvim" },
+})
 
-      -- the main branch does not attach highlighting itself
-      vim.api.nvim_create_autocmd("FileType", {
-        group = vim.api.nvim_create_augroup("TreesitterHighlight", { clear = true }),
-        callback = function(args)
-          local lang = vim.treesitter.language.get_lang(vim.bo[args.buf].filetype)
-          if not lang then
-            return
-          end
-          if pcall(vim.treesitter.start, args.buf, lang) then
-            vim.bo[args.buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
-          end
-        end,
-        desc = "Enable treesitter highlighting when a parser is available",
-      })
-    end,
+require("tokyonight").setup({})
+
+-- 2. status line
+vim.pack.add({
+  { src = "https://github.com/nvim-tree/nvim-web-devicons" },
+  { src = "https://github.com/nvim-lualine/lualine.nvim" },
+})
+
+require("lualine").setup({
+  options = {
+    theme = "tokyonight",
+    component_separators = { left = "│", right = "│" },
+    section_separators = { left = "", right = "" },
   },
-  {
-    "EdenEast/nightfox.nvim",
-    config = function()
-      require("nightfox").setup({})
-      vim.cmd("colorscheme nightfox")
-    end,
+  sections = {
+    lualine_a = { "mode" },
+    lualine_b = { "branch", "diff", "diagnostics" },
+    lualine_c = { "filename" },
+    lualine_x = { "encoding", "fileformat", "filetype" },
+    lualine_y = { "progress" },
+    lualine_z = { "location" },
   },
-  {
-    "nvim-lualine/lualine.nvim",
-    dependencies = { "nvim-tree/nvim-web-devicons" },
-    config = function()
-      require("lualine").setup({
-        options = {
-          theme = "nightfox",
-          component_separators = { left = "│", right = "│" },
-          section_separators = { left = "", right = "" },
-          disabled_filetypes = {
-            statusline = {},
-            winbar = {},
-          },
-          ignore_focus = {},
-          always_divide_middle = true,
-          globalstatus = false,
-          refresh = {
-            statusline = 1000,
-            tabline = 1000,
-            winbar = 1000,
-          },
-        },
-        sections = {
-          lualine_a = { "mode" },
-          lualine_b = { "branch", "diff", "diagnostics" },
-          lualine_c = { "filename" },
-          lualine_x = { "encoding", "fileformat", "filetype" },
-          lualine_y = { "progress" },
-          lualine_z = { "location" },
-        },
-        inactive_sections = {
-          lualine_a = {},
-          lualine_b = {},
-          lualine_c = { "filename" },
-          lualine_x = { "location" },
-          lualine_y = {},
-          lualine_z = {},
-        },
-        tabline = {},
-        winbar = {},
-        inactive_winbar = {},
-        extensions = {},
-      })
-    end,
+})
+
+-- 3. language server installer
+vim.pack.add({
+  { src = "https://github.com/mason-org/mason.nvim" },
+})
+
+require("mason").setup({
+  registries = {
+    "github:mason-org/mason-registry",
+    -- carries roslyn, the C# server roslyn.nvim drives
+    "github:Crashdummyy/mason-registry",
   },
-  {
-    "folke/zen-mode.nvim",
-    opts = {
-      window = {
-        backdrop = 0.95,
-        width = 120,
-        height = 1,
-        options = {},
-      },
-      plugins = {
-        options = {
-          enabled = true,
-          ruler = false,
-          showcmd = false,
-          laststatus = 3,
-        },
-        gitsigns = { enabled = false },
-        tmux = { enabled = false },
-      },
+})
+
+-- 4. pickers
+vim.pack.add({
+  { src = "https://github.com/ibhagwan/fzf-lua" },
+})
+
+local fzf_actions = require("fzf-lua.actions")
+require("fzf-lua").setup({
+  winopts = { backdrop = 85 },
+  keymap = {
+    builtin = {
+      ["<C-f>"] = "preview-page-down",
+      ["<C-b>"] = "preview-page-up",
+      ["<C-p>"] = "toggle-preview",
+    },
+    fzf = {
+      ["ctrl-a"] = "toggle-all",
+      ["ctrl-t"] = "first",
+      ["ctrl-g"] = "last",
+      ["ctrl-d"] = "half-page-down",
+      ["ctrl-u"] = "half-page-up",
     },
   },
-  {
-    "seblyng/roslyn.nvim",
-    opts = {
-      filewatching = "auto",
-      choose_target = nil,
-      ignore_target = nil,
-      broad_search = false,
-      lock_target = false,
-      silent = false,
-    },
-    config = function()
-      local sysname = vim.uv.os_uname().sysname:lower()
-      local iswin = not not (sysname:find("windows") or sysname:find("mingw"))
-      local roslyn_bin = iswin and "roslyn.cmd" or "roslyn"
-      local mason_bin = vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "bin", roslyn_bin)
-      local mason_exists = vim.fn.filereadable(mason_bin) == 1
-
-      if mason_exists then
-        local cmd = {
-          mason_bin,
-          "--logLevel=Information",
-          "--extensionLogDirectory=" .. vim.fs.dirname(vim.lsp.log.get_filename()),
-          "--stdio",
-        }
-        vim.lsp.config("roslyn", { cmd = cmd })
-      end
-    end,
-  },
-  {
-    "neovim/nvim-lspconfig",
-    dependencies = {
-      "williamboman/mason.nvim",
-      "williamboman/mason-lspconfig.nvim",
+  actions = {
+    files = {
+      ["ctrl-q"] = fzf_actions.file_sel_to_qf,
+      ["ctrl-n"] = fzf_actions.toggle_ignore,
+      ["ctrl-h"] = fzf_actions.toggle_hidden,
+      ["enter"] = fzf_actions.file_edit_or_qf,
     },
   },
-  {
-    "williamboman/mason.nvim",
-    build = ":MasonUpdate",
-    config = function()
-      require("mason").setup({
-        registries = {
-          "github:mason-org/mason-registry",
-          "github:Crashdummyy/mason-registry",
-        },
-      })
-    end,
-  },
-  {
-    "williamboman/mason-lspconfig.nvim",
-    config = function()
-      require("mason-lspconfig").setup({
-        ensure_installed = {},
-        automatic_enable = false,
-      })
-    end,
-  },
-  {
-    "saecki/crates.nvim",
-    tag = "stable",
-    event = { "BufRead Cargo.toml" },
-    dependencies = { "nvim-lua/plenary.nvim" },
-    config = function()
-      require("crates").setup({
-        completion = {
-          cmp = { enabled = true },
-          crates = { enabled = true },
-        },
-        lsp = {
-          enabled = true,
-          actions = true,
-          completion = false,
-          hover = true,
-        },
-      })
+})
 
-      local cmp_ok, cmp = pcall(require, "cmp")
-      if cmp_ok then
-        cmp.setup.filetype("toml", {
-          sources = cmp.config.sources({
-            { name = "crates", priority = 1000 },
-            { name = "nvim_lsp", priority = 900 },
-          }, {
-            { name = "buffer", priority = 500, keyword_length = 4 },
-            { name = "path", priority = 250 },
-          }),
-        })
-      end
+-- 5. completion
+vim.pack.add({
+  { src = "https://github.com/saghen/blink.cmp", version = vim.version.range("^1") },
+})
 
-      local crates = require("crates")
-      local opts = { silent = true }
-      vim.keymap.set("n", "<leader>ct", crates.toggle, vim.tbl_extend("force", opts, { desc = "[C]rates [T]oggle" }))
-      vim.keymap.set("n", "<leader>cr", crates.reload, vim.tbl_extend("force", opts, { desc = "[C]rates [R]eload" }))
-      vim.keymap.set("n", "<leader>cu", crates.upgrade_crate, vim.tbl_extend("force", opts, { desc = "[C]rates [U]pgrade" }))
-      vim.keymap.set("n", "<leader>cA", crates.upgrade_all_crates, vim.tbl_extend("force", opts, { desc = "[C]rates upgrade [A]ll" }))
-    end,
+require("blink.cmp").setup({
+  fuzzy = { implementation = "prefer_rust_with_warning" },
+  signature = { enabled = true },
+  keymap = {
+    preset = "default",
+    ["<C-space>"] = {},
+    ["<C-p>"] = {},
+    -- Enter accepts the highlighted item and Tab walks the list, the way the
+    -- previous nvim-cmp setup behaved. Both fall through when the menu is
+    -- closed, so Enter still breaks a line and Tab still indents.
+    ["<CR>"] = { "accept", "fallback" },
+    ["<Tab>"] = { "select_next", "snippet_forward", "fallback" },
+    ["<S-Tab>"] = { "select_prev", "snippet_backward", "fallback" },
+    ["<C-y>"] = { "show", "show_documentation", "hide_documentation" },
+    ["<C-n>"] = { "select_and_accept" },
+    ["<C-k>"] = { "select_prev", "fallback" },
+    ["<C-j>"] = { "select_next", "fallback" },
+    ["<C-b>"] = { "scroll_documentation_down", "fallback" },
+    ["<C-f>"] = { "scroll_documentation_up", "fallback" },
+    ["<C-l>"] = { "snippet_forward", "fallback" },
+    ["<C-h>"] = { "snippet_backward", "fallback" },
   },
-  {
-    "hrsh7th/nvim-cmp",
-    dependencies = {
-      "hrsh7th/cmp-nvim-lsp",
-      "hrsh7th/cmp-buffer",
-      "hrsh7th/cmp-path",
-      "L3MON4D3/LuaSnip",
-      "saadparwaiz1/cmp_luasnip",
+
+  appearance = {
+    nerd_font_variant = "normal",
+  },
+
+  completion = {
+    documentation = {
+      auto_show = true,
+      auto_show_delay_ms = 200,
     },
-    config = function()
-      local cmp = require("cmp")
-      local luasnip = require("luasnip")
+  },
 
-      cmp.setup({
-        snippet = {
-          expand = function(args)
-            luasnip.lsp_expand(args.body)
-          end,
-        },
-        mapping = cmp.mapping.preset.insert({
-          ["<C-b>"] = cmp.mapping.scroll_docs(-4),
-          ["<C-f>"] = cmp.mapping.scroll_docs(4),
-          ["<C-Space>"] = cmp.mapping.complete(),
-          ["<C-e>"] = cmp.mapping.abort(),
-          ["<CR>"] = cmp.mapping.confirm({ select = true }),
-          ["<Tab>"] = cmp.mapping(function(fallback)
-            if cmp.visible() then
-              cmp.select_next_item()
-            elseif luasnip.expand_or_jumpable() then
-              luasnip.expand_or_jump()
-            else
-              fallback()
-            end
-          end, { "i", "s" }),
-          ["<S-Tab>"] = cmp.mapping(function(fallback)
-            if cmp.visible() then
-              cmp.select_prev_item()
-            elseif luasnip.jumpable(-1) then
-              luasnip.jump(-1)
-            else
-              fallback()
-            end
-          end, { "i", "s" }),
-        }),
-        formatting = {
-          fields = { "kind", "abbr", "menu" },
-          format = function(entry, vim_item)
-            local kind_icons = {
-              Method = "󰆧",
-              Function = "󰊕",
-              Constructor = "󰆧",
-              Variable = "󰂡",
-              Field = "󰇽",
-              Property = "󰜢",
-              Class = "󰆧",
-              Interface = "󰗭",
-              Keyword = "󰌋",
-            }
+  cmdline = {
+    keymap = {
+      preset = "inherit",
+      ["<CR>"] = { "accept_and_enter", "fallback" },
+    },
+  },
 
-            local kind_name = vim_item.kind:match("%S+$") or ""
-            local icon = kind_icons[kind_name] or ""
-            
-            if icon ~= "" then
-              vim_item.kind = icon
-            else
-              vim_item.kind = ""
-            end
+  sources = { default = { "lsp" } },
+})
 
-            local completion_item = entry.completion_item
-            local detail = ""
+-- 6. syntax
+vim.pack.add({
+  { src = "https://github.com/nvim-treesitter/nvim-treesitter" },
+})
 
-            if completion_item then
-              if completion_item.detail then
-                detail = completion_item.detail
-              end
-            end
+local treesitter = require("nvim-treesitter")
+treesitter.setup({})
 
-            if kind_name == "Method" or kind_name == "Function" or kind_name == "Constructor" then
-              if detail and detail ~= "" then
-                local func_name = vim_item.abbr
-                local params = detail:match("%b()") or ""
-                local return_type = ""
-                
-                if detail:match("^%S+") then
-                  return_type = detail:match("^(%S+)%s+" .. func_name) or detail:match("^(%S+)%s+%(") or ""
-                end
-                
-                if params ~= "" then
-                  params = params:gsub("%s+", " ")
-                  local max_param_width = 60
-                  if #params > max_param_width then
-                    params = params:sub(1, max_param_width) .. "...)"
-                  end
-                  vim_item.abbr = func_name .. params
-                end
-                
-                if return_type ~= "" and return_type ~= func_name then
-                  vim_item.menu = "→ " .. return_type
-                else
-                  vim_item.menu = ""
-                end
-              else
-                vim_item.menu = ""
-              end
-            elseif kind_name == "Variable" or kind_name == "Field" or kind_name == "Property" then
-              if detail and detail ~= "" then
-                local var_type = detail:match("^%s*(%S+)") or detail
-                local max_width = 35
-                if #var_type > max_width then
-                  var_type = var_type:sub(1, max_width) .. "..."
-                end
-                vim_item.menu = var_type
-              else
-                vim_item.menu = ""
-              end
-            else
-              vim_item.menu = ""
-            end
+local parsers = { "rust", "toml", "ron", "lua", "vim", "vimdoc", "c_sharp", "xml", "markdown", "markdown_inline" }
+local installed = treesitter.get_installed()
+local missing = vim.tbl_filter(function(lang)
+  return not vim.tbl_contains(installed, lang)
+end, parsers)
+if #missing > 0 then
+  treesitter.install(missing)
+end
 
-            return vim_item
-          end,
-        },
-        sources = cmp.config.sources({
-          { name = "nvim_lsp", priority = 1000, max_item_count = 20 },
-          { name = "luasnip", priority = 750 },
-        }, {
-          { name = "buffer", priority = 500, keyword_length = 4, max_item_count = 5 },
-          { name = "path", priority = 250 },
-        }),
-        completion = {
-          keyword_length = 1,
-        },
-        window = {
-          completion = cmp.config.window.bordered(),
-          documentation = cmp.config.window.bordered(),
-        },
-      })
-    end,
+-- the main branch installs parsers but never starts a highlighter itself
+vim.api.nvim_create_autocmd("FileType", {
+  group = vim.api.nvim_create_augroup("TreesitterHighlight", { clear = true }),
+  callback = function(args)
+    local lang = vim.treesitter.language.get_lang(vim.bo[args.buf].filetype)
+    if not lang then
+      return
+    end
+    if pcall(vim.treesitter.start, args.buf, lang) then
+      vim.bo[args.buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
+    end
+  end,
+  desc = "Enable treesitter highlighting when a parser is available",
+})
+
+-- 7. C#
+vim.pack.add({
+  { src = "https://github.com/seblyng/roslyn.nvim" },
+})
+
+require("roslyn").setup({
+  filewatching = "auto",
+  broad_search = false,
+  lock_target = false,
+  silent = false,
+})
+
+local roslyn_bin = vim.fs.joinpath(vim.fn.stdpath("data"), "mason", "bin", "roslyn")
+if vim.fn.filereadable(roslyn_bin) == 1 then
+  vim.lsp.config("roslyn", {
+    cmd = {
+      roslyn_bin,
+      "--logLevel=Information",
+      "--extensionLogDirectory=" .. vim.fs.dirname(vim.lsp.log.get_filename()),
+      "--stdio",
+    },
+  })
+end
+
+-- 8. Cargo.toml
+vim.pack.add({
+  { src = "https://github.com/nvim-lua/plenary.nvim" },
+  { src = "https://github.com/saecki/crates.nvim", version = "stable" },
+})
+
+require("crates").setup({
+  completion = { crates = { enabled = true } },
+  -- crates.nvim answers as an in-process language server, so its completions
+  -- and hovers arrive through blink.cmp's lsp source with nothing to wire up
+  lsp = { enabled = true, actions = true, completion = true, hover = true },
+})
+
+-- 9. distraction-free editing
+vim.pack.add({
+  { src = "https://github.com/folke/zen-mode.nvim" },
+})
+
+require("zen-mode").setup({
+  window = { backdrop = 0.95, width = 120, height = 1 },
+  plugins = {
+    options = { enabled = true, ruler = false, showcmd = false, laststatus = 3 },
+    gitsigns = { enabled = false },
+    tmux = { enabled = false },
   },
 })

@@ -1,17 +1,16 @@
 local augroup = vim.api.nvim_create_augroup
 local autocmd = vim.api.nvim_create_autocmd
 
-augroup("HighlightYank", { clear = true })
 autocmd("TextYankPost", {
-  group = "HighlightYank",
+  group = augroup("YankHighlight", { clear = true }),
+  pattern = "*",
   callback = function()
-    vim.highlight.on_yank()
+    vim.hl.on_yank({ timeout = 170 })
   end,
 })
 
-augroup("ResizeSplits", { clear = true })
 autocmd({ "VimResized", "WinResized" }, {
-  group = "ResizeSplits",
+  group = augroup("ResizeSplits", { clear = true }),
   callback = function(args)
     if args.event == "VimResized" then
       vim.cmd("tabdo wincmd =")
@@ -27,86 +26,79 @@ autocmd({ "VimResized", "WinResized" }, {
   end,
 })
 
-augroup("RoslynAttach", { clear = true })
+-- roslyn.nvim starts the server itself, so the settings it should run with have
+-- to be pushed after the fact. Keymaps come from the LspAttach hook in lua/lsp.lua.
 autocmd("LspAttach", {
-  group = "RoslynAttach",
+  group = augroup("RoslynSettings", { clear = true }),
   callback = function(args)
     local client = vim.lsp.get_client_by_id(args.data.client_id)
-    if client and client.name == "roslyn" then
-      if _G.lsp_on_attach then
-        _G.lsp_on_attach(client, args.buf)
-      end
-      client.notify("workspace/didChangeConfiguration", {
-        settings = {
-          ["csharp|background_analysis"] = {
-            ["background_analysis.dotnet_analyzer_diagnostics_scope"] = "fullSolution",
-            ["background_analysis.dotnet_compiler_diagnostics_scope"] = "fullSolution",
-          },
-          ["csharp|inlay_hints"] = {
-            csharp_enable_inlay_hints_for_implicit_object_creation = true,
-            csharp_enable_inlay_hints_for_implicit_variable_types = true,
-            csharp_enable_inlay_hints_for_lambda_parameter_types = true,
-            csharp_enable_inlay_hints_for_types = true,
-            dotnet_enable_inlay_hints_for_indexer_parameters = true,
-            dotnet_enable_inlay_hints_for_literal_parameters = true,
-            dotnet_enable_inlay_hints_for_object_creation_parameters = true,
-            dotnet_enable_inlay_hints_for_other_parameters = true,
-            dotnet_enable_inlay_hints_for_parameters = true,
-          },
-          ["csharp|completion"] = {
-            dotnet_provide_regex_completions = true,
-            dotnet_show_completion_items_from_unimported_namespaces = true,
-            dotnet_show_name_completion_suggestions = true,
-          },
-          ["csharp|code_lens"] = {
-            dotnet_enable_references_code_lens = true,
-            dotnet_enable_tests_code_lens = true,
-          },
-          ["csharp|formatting"] = {
-            dotnet_organize_imports_on_format = true,
-          },
-          ["csharp|symbol_search"] = {
-            dotnet_search_reference_assemblies = true,
-          },
-        },
-      })
+    if not client or client.name ~= "roslyn" then
+      return
     end
+    client:notify("workspace/didChangeConfiguration", {
+      settings = {
+        ["csharp|background_analysis"] = {
+          ["background_analysis.dotnet_analyzer_diagnostics_scope"] = "fullSolution",
+          ["background_analysis.dotnet_compiler_diagnostics_scope"] = "fullSolution",
+        },
+        ["csharp|inlay_hints"] = {
+          csharp_enable_inlay_hints_for_implicit_object_creation = true,
+          csharp_enable_inlay_hints_for_implicit_variable_types = true,
+          csharp_enable_inlay_hints_for_lambda_parameter_types = true,
+          csharp_enable_inlay_hints_for_types = true,
+          dotnet_enable_inlay_hints_for_indexer_parameters = true,
+          dotnet_enable_inlay_hints_for_literal_parameters = true,
+          dotnet_enable_inlay_hints_for_object_creation_parameters = true,
+          dotnet_enable_inlay_hints_for_other_parameters = true,
+          dotnet_enable_inlay_hints_for_parameters = true,
+        },
+        ["csharp|completion"] = {
+          dotnet_provide_regex_completions = true,
+          dotnet_show_completion_items_from_unimported_namespaces = true,
+          dotnet_show_name_completion_suggestions = true,
+        },
+        ["csharp|code_lens"] = {
+          dotnet_enable_references_code_lens = true,
+          dotnet_enable_tests_code_lens = true,
+        },
+        ["csharp|formatting"] = {
+          dotnet_organize_imports_on_format = true,
+        },
+        ["csharp|symbol_search"] = {
+          dotnet_search_reference_assemblies = true,
+        },
+      },
+    })
   end,
 })
 
-augroup("RustFormatOnSave", { clear = true })
 autocmd("BufWritePre", {
-  group = "RustFormatOnSave",
+  group = augroup("RustFormatOnSave", { clear = true }),
   pattern = "*.rs",
   callback = function(args)
-    if #vim.lsp.get_clients({ bufnr = args.buf, name = "rust_analyzer" }) > 0 then
+    if #vim.lsp.get_clients({ bufnr = args.buf, name = "rust-analyzer" }) > 0 then
       vim.lsp.buf.format({ bufnr = args.buf, timeout_ms = 3000 })
     end
   end,
   desc = "Format Rust buffers with rustfmt via rust-analyzer",
 })
 
-augroup("RustFileSettings", { clear = true })
 autocmd("FileType", {
-  group = "RustFileSettings",
+  group = augroup("RustFileSettings", { clear = true }),
   pattern = "rust",
+  -- indentation already matches rustfmt globally; only the line length differs
   callback = function()
-    vim.bo.tabstop = 4
-    vim.bo.shiftwidth = 4
-    vim.bo.expandtab = true
-    vim.bo.commentstring = "// %s"
     vim.opt_local.colorcolumn = "100"
   end,
-  desc = "rustfmt-compatible indentation for Rust files",
+  desc = "rustfmt's line length for Rust files",
 })
 
 -- virtual_lines renders the cursor line, so the inline virtual text for that
 -- line is suppressed in config.lua. That decision is made at render time, and
 -- inline text is only rendered when diagnostics change, so re-render it
 -- whenever the cursor lands on a different line.
-augroup("DiagnosticCursorLine", { clear = true })
 autocmd({ "CursorMoved", "DiagnosticChanged" }, {
-  group = "DiagnosticCursorLine",
+  group = augroup("DiagnosticCursorLine", { clear = true }),
   callback = function(args)
     local lnum = vim.api.nvim_win_get_cursor(0)[1]
     local previous = vim.b[args.buf].diagnostic_rendered_lnum
@@ -121,9 +113,9 @@ autocmd({ "CursorMoved", "DiagnosticChanged" }, {
       if not line then
         return false
       end
-      local lnum = line - 1
+      local target = line - 1
       for _, d in ipairs(vim.diagnostic.get(args.buf)) do
-        if lnum >= d.lnum and lnum <= (d.end_lnum or d.lnum) then
+        if target >= d.lnum and target <= (d.end_lnum or d.lnum) then
           return true
         end
       end
@@ -135,4 +127,3 @@ autocmd({ "CursorMoved", "DiagnosticChanged" }, {
   end,
   desc = "Keep inline diagnostics off the line shown as virtual lines",
 })
-

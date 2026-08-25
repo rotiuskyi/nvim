@@ -1,21 +1,7 @@
-local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
-if not vim.loop.fs_stat(lazypath) then
-  vim.fn.system({
-    "git",
-    "clone",
-    "--filter=blob:none",
-    "https://github.com/folke/lazy.nvim.git",
-    "--branch=stable",
-    lazypath,
-  })
-end
-vim.opt.rtp:prepend(lazypath)
-
+require("plugins")
 require("config")
 require("keymap")
-require("autocmd")
--- plugins first: lsp.lua reads cmp_nvim_lsp capabilities, which requires the
--- plugin to already be on the runtimepath.
-require("plugins")
 require("lsp")
+require("autocmd")
 
+vim.cmd.colorscheme("tokyonight")

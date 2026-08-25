@@ -1,14 +1,26 @@
+vim.g.mapleader = " "
+vim.g.maplocalleader = " "
+
+vim.opt.guicursor = "i:block"
 vim.opt.number = true
 vim.opt.relativenumber = true
+vim.opt.tabstop = 4
+vim.opt.softtabstop = 4
+vim.opt.shiftwidth = 4
+vim.opt.expandtab = true
+vim.opt.colorcolumn = "80"
+vim.opt.listchars = "tab: ,multispace:|   ,eol:󰌑"
+vim.opt.winborder = "rounded"
+vim.opt.clipboard = "unnamedplus"
+
 vim.opt.mouse = "a"
 vim.opt.ignorecase = true
 vim.opt.smartcase = true
-vim.opt.hlsearch = false
+-- every match of the current search stays highlighted, the way VSCode's find
+-- box marks them; <Esc> clears it (see lua/keymap.lua)
+vim.opt.hlsearch = true
 vim.opt.wrap = false
 vim.opt.breakindent = true
-vim.opt.tabstop = 2
-vim.opt.shiftwidth = 2
-vim.opt.expandtab = true
 vim.opt.signcolumn = "yes"
 vim.opt.updatetime = 250
 vim.opt.timeoutlen = 300
